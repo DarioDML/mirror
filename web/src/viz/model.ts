@@ -44,7 +44,7 @@ export function easeOut(x: number): number {
 }
 
 export function isCareGate(g: Gate): boolean {
-  return g === "care_advisor" || g === "care_suppress";
+  return g === "care_advisor" || g === "care_suppress" || g === "human_first";
 }
 
 export function isHumanRoute(state: State, gate: Gate): boolean {
@@ -67,7 +67,7 @@ function isActive(s: SignalState, o: Overrides, eff: Consents): boolean {
 function decide(b: BeliefState, inferred: number, fb: BeliefState["feedback"]): { state: State; gate: Gate } {
   if (fb === "rejected") return { state: "suppressed_feedback", gate: "rejected" };
   if (inferred < b.thresholds.ask) return { state: "wait", gate: "below_ask" };
-  if (b.gate === "care_advisor") return { state: "advisor", gate: "care_advisor" };
+  if (b.gate === "care_advisor" || b.gate === "human_first") return { state: "advisor", gate: b.gate };
   if (b.gate === "care_suppress") return { state: "wait", gate: "care_suppress" };
   if (b.gate === "min_age") return { state: "blocked_guardrail", gate: "min_age" };
   if (inferred >= b.thresholds.act) return { state: "act", gate: "above_act" };

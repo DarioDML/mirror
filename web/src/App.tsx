@@ -158,7 +158,7 @@ export default function App() {
           Mirror
         </div>
         <div className="topbar-right">
-          {current.role !== "customer" && <LangSwitch lang={lang} onLang={setLang} />}
+          {current.role === "advisor" && <LangSwitch lang={lang} onLang={setLang} />}
           <span className="role-pill">{t(lang, ROLE_KEY[current.role])}</span>
           <span className="muted">{current.display_name}</span>
           <button className="btn ghost small" onClick={logout}>

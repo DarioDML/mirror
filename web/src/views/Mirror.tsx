@@ -28,6 +28,15 @@ export default function Mirror() {
   const [error, setError] = useState<string | null>(null);
   const [rev, setRev] = useState(0);
   const [labOpen, setLabOpen] = useState(false);
+
+  useEffect(() => {
+    if (!labOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLabOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [labOpen]);
   const [showMore, setShowMore] = useState(false);
   const busyRef = useRef(false);
   const seqRef = useRef(0);

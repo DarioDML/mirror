@@ -6,6 +6,7 @@ export type Gate =
   | "min_age"
   | "care_advisor"
   | "care_suppress"
+  | "human_first"
   | "above_act"
   | "between_ask_act"
   | "fatigue_cap";

@@ -224,7 +224,7 @@ export default function ReasoningTheater({ lang, payload, stage }: TheaterProps)
     let last = performance.now();
     let raf = 0;
     const tick = (now: number): void => {
-      const dt = Math.min(now - last, 1000);
+      const dt = Math.max(0, Math.min(now - last, 1000));
       last = now;
       setPos((p) => Math.min(n, p + dt / FRAME_MS));
       raf = requestAnimationFrame(tick);
@@ -245,7 +245,7 @@ export default function ReasoningTheater({ lang, payload, stage }: TheaterProps)
     [n],
   );
 
-  const idx = Math.min(Math.floor(pos), n - 1);
+  const idx = Math.max(0, Math.min(Math.floor(pos), n - 1));
   const frac = pos >= n ? 1 : pos - idx;
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>): void => {

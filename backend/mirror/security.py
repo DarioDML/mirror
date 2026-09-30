@@ -129,7 +129,7 @@ LIMITS = {
     "run": (6, 60),           # full population runs per product owner
     "write": (60, 60),        # feedback / consent changes per user
     "sim": (120, 60),         # what-if simulations per user (read-only, debounced sliders)
-    "theater": (20, 60),      # reasoning-theater replays per user
+    "theater": (60, 60),      # reasoning-theater replays per user
     "whynot": (60, 60),       # why-not explanations per user
     "galaxy": (30, 60),       # population galaxy reads per product owner
 }

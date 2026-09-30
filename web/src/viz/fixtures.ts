@@ -158,7 +158,7 @@ function weightOf(m: MomentDef, sigId: string): number {
 
 function decide(m: MomentDef, inferred: number, human: boolean): { state: State; gate: Gate } {
   if (inferred < m.ask) return { state: "wait", gate: "below_ask" };
-  if (human) return { state: "advisor", gate: "care_advisor" };
+  if (human) return { state: "advisor", gate: "human_first" };
   if (inferred >= m.act) return { state: "act", gate: "above_act" };
   return { state: "ask", gate: "between_ask_act" };
 }

@@ -143,6 +143,11 @@ const NARRATION: Record<Gate, Tri> = {
     nl: "Ik ben {pct}% zeker over \"{title}\". Hier helpt een persoon je beter dan een appbericht, dus een persoon helpt je verder.",
     fr: "Je suis sûr à {pct}% pour \"{title}\". Ici, une personne vous aide mieux qu'un message dans l'app : une personne vous aidera.",
   },
+  human_first: {
+    en: "I'm {pct}% sure about \"{title}\". Here a person can help you better than an app message, so a person will help you.",
+    nl: "Ik ben {pct}% zeker over \"{title}\". Hier helpt een persoon je beter dan een appbericht, dus een persoon helpt je verder.",
+    fr: "Je suis sûr à {pct}% pour \"{title}\". Ici, une personne vous aide mieux qu'un message dans l'app : une personne vous aidera.",
+  },
   care_suppress: {
     en: "I'm {pct}% sure about \"{title}\". I keep the app quiet here; a person will help you if you want.",
     nl: "Ik ben {pct}% zeker over \"{title}\". Ik hou de app hier stil; een persoon helpt je als je dat wilt.",
@@ -161,7 +166,7 @@ const NARRATION: Record<Gate, Tri> = {
 };
 
 export function narrate(lang: Lang, gate: Gate, vars: { title: string; inferred: number; ask: number; act: number }): string {
-  return NARRATION[gate][lang]
+  return (NARRATION[gate] ?? NARRATION.between_ask_act)[lang]
     .split("{pct}")
     .join(String(Math.round(vars.inferred * 100)))
     .split("{ask}")
@@ -173,7 +178,7 @@ export function narrate(lang: Lang, gate: Gate, vars: { title: string; inferred:
 }
 
 export function stateLabel(lang: Lang, state: State, gate: Gate): string {
-  if (state === "advisor" || gate === "care_advisor" || gate === "care_suppress") return t(lang, "stHuman");
+  if (state === "advisor" || gate === "care_advisor" || gate === "care_suppress" || gate === "human_first") return t(lang, "stHuman");
   switch (state) {
     case "act":
       return t(lang, "stAct");

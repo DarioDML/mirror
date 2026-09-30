@@ -97,7 +97,7 @@ function paintOverlay(ctx: CanvasRenderingContext2D, live: Live, ts: number): vo
     }
   }
   ctx.globalAlpha = 1;
-  ctx.font = "600 12px system-ui, sans-serif";
+  ctx.font = "600 17px system-ui, sans-serif";
   ctx.textAlign = "center";
   placed.forEach((p, c) => {
     const sel = c === live.selected;
