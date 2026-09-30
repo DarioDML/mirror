@@ -1,16 +1,27 @@
 import { useState, type FormEvent } from "react";
-import { api, ApiError } from "../api";
-import type { Session } from "../types";
+import { makeApi, ApiError } from "../api";
+import { t } from "../i18n";
+import type { Lang, Session } from "../types";
+import { DECK_USERS, type DeckSession } from "../deck/deck";
+import LangSwitch from "../deck/LangSwitch";
 
-const DEMO_USERS = [
-  { username: "sofie", label: "Sofie", hint: "Customer · buying a home" },
-  { username: "lucas", label: "Lucas", hint: "Customer · going freelance" },
-  { username: "marc", label: "Marc", hint: "Customer · needs a human" },
-  { username: "an", label: "An", hint: "Advisor for Sofie & Marc" },
-  { username: "po", label: "Product owner", hint: "Population view" },
-];
+const loginApi = makeApi(
+  () => null,
+  () => undefined,
+);
 
-export default function Login({ onLogin }: { onLogin: (s: Session) => void }) {
+type Props = {
+  lang: Lang;
+  onLang: (l: Lang) => void;
+  onLogin: (username: string, s: Session) => void;
+  onDeck: (sessions: DeckSession[]) => void;
+};
+
+function failureText(lang: Lang, err: unknown): string {
+  return err instanceof ApiError && (err.status === 401 || err.status === 422) ? t(lang, "lp_badLogin") : t(lang, "lp_unreachable");
+}
+
+export default function Login({ lang, onLang, onLogin, onDeck }: Props) {
   const [username, setUsername] = useState("sofie");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,47 +29,82 @@ export default function Login({ onLogin }: { onLogin: (s: Session) => void }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      onLogin(await api<Session>("/auth/login", { method: "POST", body: { username, password } }));
+      const s = await loginApi.json<Session>("/auth/login", { method: "POST", body: { username: username.trim(), password } });
+      setPassword("");
+      onLogin(username.trim(), s);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reach the server");
+      setError(failureText(lang, err));
     } finally {
       setBusy(false);
     }
   }
 
+  async function startDeck() {
+    if (busy || !password) return;
+    setBusy(true);
+    setError(null);
+    const results = await Promise.allSettled(
+      DECK_USERS.map((u) => loginApi.json<Session>("/auth/login", { method: "POST", body: { username: u.username, password } })),
+    );
+    setPassword("");
+    const sessions: DeckSession[] = [];
+    results.forEach((r, i) => {
+      const u = DECK_USERS[i];
+      if (u && r.status === "fulfilled") {
+        sessions.push({ username: u.username, role: r.value.role, display_name: r.value.display_name, token: r.value.token, expired: false });
+      }
+    });
+    setBusy(false);
+    if (sessions.length === 0) {
+      const first = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      setError(failureText(lang, first?.reason));
+      return;
+    }
+    if (sessions.length < DECK_USERS.length) setError(t(lang, "lp_deckFail"));
+    onDeck(sessions);
+  }
+
   return (
     <div className="login-wrap">
+      <div className="login-lang">
+        <LangSwitch lang={lang} onLang={onLang} />
+      </div>
       <div className="login-card">
         <div className="brand big">
           <span className="brand-mark" aria-hidden />
           Mirror
         </div>
-        <p className="lead">One shared understanding of every customer, which the customer can see and correct.</p>
+        <p className="lead">{t(lang, "lp_tagline")}</p>
         <form onSubmit={submit} className="stack">
           <label className="field">
-            <span>Username</span>
+            <span>{t(lang, "lp_username")}</span>
             <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
           </label>
           <label className="field">
-            <span>Password</span>
+            <span>{t(lang, "lp_password")}</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              placeholder="DEMO_PASSWORD from your .env"
+              placeholder={t(lang, "lp_passwordPh")}
             />
           </label>
-          {error && <div className="error">{error}</div>}
+          {error && (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          )}
           <button className="btn primary" disabled={busy || !password}>
-            {busy ? "Signing in…" : "Sign in"}
+            {busy ? t(lang, "lp_signingIn") : t(lang, "lp_signIn")}
           </button>
         </form>
         <div className="demo-users">
-          {DEMO_USERS.map((u) => (
+          {DECK_USERS.map((u) => (
             <button
               key={u.username}
               type="button"
@@ -66,9 +112,15 @@ export default function Login({ onLogin }: { onLogin: (s: Session) => void }) {
               onClick={() => setUsername(u.username)}
             >
               <strong>{u.label}</strong>
-              <span>{u.hint}</span>
+              <span>{t(lang, u.key)}</span>
             </button>
           ))}
+        </div>
+        <div className="deck-start">
+          <button type="button" className="btn deck-btn" disabled={busy || !password} onClick={startDeck}>
+            {t(lang, "lp_deck")}
+          </button>
+          <p className="muted small">{t(lang, "lp_deckSub")}</p>
         </div>
       </div>
     </div>

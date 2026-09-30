@@ -1,7 +1,21 @@
 export type Lang = "en" | "nl" | "fr";
 export type Role = "customer" | "advisor" | "product_owner";
 
-export type Session = { token: string; role: Role; display_name: string };
+export type Session = { token: string; role: Role; display_name: string; expires_in?: number };
+
+export type Ui = {
+  v: number;
+  layout: "guided" | "studio" | "quick";
+  theme: "daylight" | "linen" | "studio" | "pop";
+  density: "airy" | "normal" | "compact";
+  text_scale: number;
+  motion: "none" | "subtle" | "lively";
+  tone: "neutral" | "reassuring" | "direct" | "playful";
+  register: "informal" | "formal";
+  accent: string;
+  emphasis: "overview" | "question" | "plan" | "human";
+  math: "hidden" | "summary" | "full";
+};
 
 export type Evidence = {
   signal_id: string;
@@ -28,6 +42,8 @@ export type Twin = {
   customer: { first_name: string; language: Lang; consents: { transactions: boolean; app: boolean } };
   beliefs: Belief[];
   plans: { moment_id: string; title: string; category: string }[];
+  ui?: Ui;
+  as_of?: string;
 };
 
 export type GuidanceItem = {
@@ -41,6 +57,8 @@ export type GuidanceItem = {
   steps: { product: string; title: string; body: string }[];
   why: string | null;
   confirmed_by_you: boolean;
+  voice_script?: string;
+  tone?: string;
 };
 
 export type AdvisorCustomer = {

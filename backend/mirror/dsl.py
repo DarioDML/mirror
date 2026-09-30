@@ -37,7 +37,7 @@ class Signal(BaseModel):
     id: str = Field(pattern=ID_PATTERN)
     label: Text  # a noun phrase that reads well inside a sentence: "a transfer to a notary"
     source: Literal["transactions", "app", "profile"]
-    weight: float = Field(gt=0, le=0.95)
+    weight: float = Field(ge=0.01, le=0.95)
     # transactions / app
     kind: Optional[str] = Field(default=None, pattern=ID_PATTERN)
     min_count: int = Field(default=1, ge=1, le=100)
@@ -67,6 +67,8 @@ class Signal(BaseModel):
         for v in vals:
             if numeric and (isinstance(v, bool) or not isinstance(v, (int, float))):
                 raise ValueError(f"{self.field} values must be numbers")
+            if numeric and not (0 <= v <= (120 if self.field == "age" else 20)):
+                raise ValueError(f"{self.field} value out of range")
             if not numeric and (not isinstance(v, str) or v not in REGIONS):
                 raise ValueError(f"region values must be one of {sorted(REGIONS)}")
         if self.op == "between":
@@ -137,7 +139,7 @@ _CMP = {">=": ">=", "<=": "<=", "=": "="}
 _CONSENT = {"transactions": "c.consent_transactions", "app": "c.consent_app"}
 
 
-def compile_hits(moments: list[Moment], customer_filter: bool) -> tuple[str, dict]:
+def compile_hits(moments: list[Moment], customer_filter: bool, *, customers: str = "customers") -> tuple[str, dict]:
     """One UNION ALL query producing (customer_id, moment_id, signal_id, source, weight, n, last_seen).
 
     Consent is enforced here, at query level: a data source a customer switched off is never read.
@@ -159,9 +161,9 @@ def compile_hits(moments: list[Moment], customer_filter: bool) -> tuple[str, dic
                 parts.append(
                     f"SELECT e.customer_id, ${p}_mid AS moment_id, ${p}_sid AS signal_id, ${p}_src AS source, "
                     f"${p}_w AS weight, COUNT(*) AS n, MAX(e.ts) AS last_seen "
-                    f"FROM events e JOIN customers c ON c.customer_id = e.customer_id "
+                    f"FROM events e JOIN {customers} c ON c.customer_id = e.customer_id "
                     f"WHERE {_CONSENT[s.source]} AND e.source = ${p}_src AND e.kind = ${p}_kind "
-                    f"AND e.ts > CAST($now AS DATE) - CAST(${p}_days AS INTEGER){amount}{cf} "
+                    f"AND e.ts <= CAST($now AS DATE) AND e.ts > CAST($now AS DATE) - CAST(${p}_days AS INTEGER){amount}{cf} "
                     f"GROUP BY e.customer_id HAVING COUNT(*) >= ${p}_min"
                 )
             else:
@@ -179,7 +181,7 @@ def compile_hits(moments: list[Moment], customer_filter: bool) -> tuple[str, dic
                 parts.append(
                     f"SELECT c.customer_id, ${p}_mid AS moment_id, ${p}_sid AS signal_id, 'profile' AS source, "
                     f"${p}_w AS weight, CAST(1 AS BIGINT) AS n, CAST(NULL AS DATE) AS last_seen "
-                    f"FROM customers c WHERE {cond}{cf}"
+                    f"FROM {customers} c WHERE {cond}{cf}"
                 )
     if not parts:
         return ("SELECT CAST(NULL AS INTEGER) AS customer_id, '' AS moment_id, '' AS signal_id, '' AS source, "
@@ -187,10 +189,13 @@ def compile_hits(moments: list[Moment], customer_filter: bool) -> tuple[str, dic
     return "\nUNION ALL\n".join(parts), params
 
 
-def twin_sql(hits_from: str, customer_filter: bool) -> str:
+def twin_sql(hits_from: str, customer_filter: bool, *, feedback: str = "feedback", customers: str = "customers",
+             moments: str = "moments_rt") -> str:
     """Beliefs (noisy-OR of signal weights) + customer feedback + guardrails + fatigue -> one state per moment.
 
     States: act | ask | advisor | wait | blocked_guardrail | deferred_fatigue | suppressed_feedback
+    Gates (which rule decided): rejected | below_ask | min_age | care_advisor | care_suppress | above_act |
+    between_ask_act | fatigue_cap
     """
     cf = " AND customer_id = $cid" if customer_filter else ""
     return f"""
@@ -199,12 +204,12 @@ agg AS (
   SELECT customer_id, moment_id,
          1 - exp(sum(ln(1 - weight))) AS inferred,
          count(*) FILTER (WHERE source <> 'profile') AS behav,
-         list(signal_id ORDER BY weight DESC) AS evidence
+         list(signal_id ORDER BY weight DESC, signal_id) AS evidence
   FROM h GROUP BY customer_id, moment_id
 ),
 b AS (SELECT * FROM agg WHERE behav > 0),
-fb AS (SELECT customer_id, moment_id, status FROM feedback
-       WHERE moment_id IN (SELECT moment_id FROM moments_rt){cf}),
+fb AS (SELECT customer_id, moment_id, status FROM {feedback}
+       WHERE moment_id IN (SELECT moment_id FROM {moments}){cf}),
 eff AS (
   SELECT coalesce(b.customer_id, fb.customer_id) AS customer_id,
          coalesce(b.moment_id, fb.moment_id) AS moment_id,
@@ -216,19 +221,30 @@ eff AS (
 ),
 j AS (
   SELECT eff.*, m.ask_t, m.act_t, m.priority, m.min_age, m.vulnerable_policy, c.age, c.vulnerable
-  FROM eff JOIN moments_rt m ON m.moment_id = eff.moment_id
-           JOIN customers c ON c.customer_id = eff.customer_id
+  FROM eff JOIN {moments} m ON m.moment_id = eff.moment_id
+           JOIN {customers} c ON c.customer_id = eff.customer_id
+),
+g AS (
+  SELECT *, CASE
+      WHEN feedback = 'rejected' THEN 'rejected'
+      WHEN confidence < ask_t THEN 'below_ask'
+      WHEN age < min_age THEN 'min_age'
+      WHEN vulnerable AND vulnerable_policy = 'advisor' THEN 'care_advisor'
+      WHEN vulnerable THEN 'care_suppress'
+      WHEN confidence >= act_t THEN 'above_act'
+      ELSE 'between_ask_act' END AS gate0
+  FROM j
 ),
 s AS (
-  SELECT *, CASE
-      WHEN feedback = 'rejected' THEN 'suppressed_feedback'
-      WHEN confidence < ask_t THEN 'wait'
-      WHEN age < min_age THEN 'blocked_guardrail'
-      WHEN vulnerable AND vulnerable_policy = 'advisor' THEN 'advisor'
-      WHEN vulnerable THEN 'blocked_guardrail'
-      WHEN confidence >= act_t THEN 'act'
+  SELECT *, CASE gate0
+      WHEN 'rejected' THEN 'suppressed_feedback'
+      WHEN 'below_ask' THEN 'wait'
+      WHEN 'min_age' THEN 'blocked_guardrail'
+      WHEN 'care_suppress' THEN 'blocked_guardrail'
+      WHEN 'care_advisor' THEN 'advisor'
+      WHEN 'above_act' THEN 'act'
       ELSE 'ask' END AS state0
-  FROM j
+  FROM g
 ),
 r AS (
   SELECT *, row_number() OVER (
@@ -237,6 +253,8 @@ r AS (
   FROM s
 )
 SELECT customer_id, moment_id, confidence, inferred, feedback, evidence, priority, ask_t, act_t,
-       CASE WHEN state0 IN ('act', 'ask') AND rk > $max_active THEN 'deferred_fatigue' ELSE state0 END AS state
+       CASE WHEN state0 IN ('act', 'ask') AND rk > $max_active THEN 'deferred_fatigue' ELSE state0 END AS state,
+       CASE WHEN state0 IN ('act', 'ask') AND rk > $max_active THEN 'fatigue_cap' ELSE gate0 END AS gate,
+       CAST(rk AS INTEGER) AS rk, priority * confidence AS score
 FROM r
 """

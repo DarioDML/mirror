@@ -90,6 +90,14 @@ APP_TABLES_SQL = [
         created_at TIMESTAMP DEFAULT current_timestamp,
         PRIMARY KEY (customer_id, moment_id, state, lang, channel)
     )""",
+    """CREATE TABLE IF NOT EXISTS customer_prefs (
+        customer_id INTEGER PRIMARY KEY,
+        text_scale VARCHAR,
+        motion VARCHAR,
+        detail VARCHAR,
+        tone VARCHAR,
+        updated_at TIMESTAMP DEFAULT current_timestamp
+    )""",
 ]
 
 

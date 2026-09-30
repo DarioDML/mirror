@@ -21,14 +21,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import config
 from .channels import Channels, evidence_phrase, tts
 from .db import DB
 from .dsl import ID_PATTERN, Moment
 from .engine import Engine
-from .security import DUMMY_HASH, check_rate, create_token, decode_token, verify_password
+from .persona import DetailOverride, MotionOverride, Overrides, TextScaleOverride, ToneOverride, Ui, derive
+from .security import (DUMMY_HASH, check_rate, create_token, decode_token, login_blocked, login_failed,
+                       verify_password)
 
 log = logging.getLogger("mirror.api")
 
@@ -154,13 +156,15 @@ def login(body: LoginIn, request: Request):
     ip = request.client.host if request.client else "unknown"
     username = body.username.lower()
     rate("login_ip", ip)
-    rate("login_user", f"{ip}:{username}")
+    if login_blocked(username):
+        raise HTTPException(429, "Too many requests, slow down")
     row = state.db.one(
         "SELECT username, display_name, role, password_hash FROM users WHERE username = $u AND NOT disabled",
         {"u": username},
     )
     ok = verify_password(body.password, row["password_hash"] if row else DUMMY_HASH)
     if not row or not ok:
+        login_failed(username)
         raise HTTPException(401, "Invalid username or password")
     return {"token": create_token(row["username"]), "role": row["role"], "display_name": row["display_name"],
             "expires_in": config.TOKEN_TTL_MINUTES * 60}
@@ -189,6 +193,37 @@ def _customer(cid: int) -> dict:
     )
 
 
+def _overrides(cid: int) -> Overrides:
+    row = state.db.one("SELECT text_scale, motion, detail, tone FROM customer_prefs WHERE customer_id = $cid",
+                       {"cid": cid})
+    if not row:
+        return {}
+    return {"text_scale": row["text_scale"], "motion": row["motion"], "detail": row["detail"], "tone": row["tone"]}
+
+
+def _ui(cid: int) -> Ui:
+    c = state.db.one(
+        "SELECT age, household_size, language, vulnerable, consent_app FROM customers WHERE customer_id = $cid",
+        {"cid": cid},
+    )
+    app_events = 0
+    if c["consent_app"]:
+        app_events = int(state.db.scalar(
+            "SELECT count(*) FROM events WHERE customer_id = $cid AND source = 'app' "
+            "AND ts > CAST($now AS DATE) - 180", {"cid": cid, "now": config.SIM_NOW}) or 0)
+    moments = state.engine.moments()
+    twin, _ = state.engine.customer_rows(cid)
+    active = [r for r in twin if r["state"] in ("act", "ask", "advisor") and r["moment_id"] in moments]
+    top = max(active, key=lambda r: r["priority"] * r["confidence"], default=None)
+    return derive(
+        age=int(c["age"]), household_size=int(c["household_size"]), language=c["language"],
+        top_category=moments[top["moment_id"]].category if top else None,
+        top_state=top["state"] if top else None, confidence=float(top["confidence"]) if top else 0.0,
+        consent_app=bool(c["consent_app"]), app_events_180d=app_events, care=bool(c["vulnerable"]),
+        overrides=_overrides(cid),
+    )
+
+
 def _twin_payload(cid: int) -> dict:
     c = _customer(cid)
     lang = c["language"]
@@ -201,6 +236,8 @@ def _twin_payload(cid: int) -> dict:
                      "consents": {"transactions": c["consent_transactions"], "app": c["consent_app"]}},
         "beliefs": beliefs,
         "plans": plans,
+        "ui": _ui(cid),
+        "as_of": config.SIM_NOW,
     }
 
 
@@ -232,6 +269,7 @@ def my_feedback(body: FeedbackIn, moment_id: str = MomentId, user: User = Depend
                 {"cid": cid, "mid": moment_id, "status": body.status, "note": body.note},
             )
         state.engine.refresh_customer(cid)
+        state.channels.invalidate(cid)
     return _twin_payload(cid)
 
 
@@ -250,33 +288,62 @@ def my_consents(body: ConsentsIn, user: User = Depends(role("customer"))):
             {"t": body.transactions, "a": body.app, "cid": user.customer_id},
         )
         state.engine.refresh_customer(user.customer_id)
+        state.channels.invalidate(user.customer_id)
     return _twin_payload(user.customer_id)
 
 
 class PrefsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    language: Literal["en", "nl", "fr"]
+    language: Optional[Literal["en", "nl", "fr"]] = None
+    text_scale: Optional[TextScaleOverride] = None
+    motion: Optional[MotionOverride] = None
+    detail: Optional[DetailOverride] = None
+    tone: Optional[ToneOverride] = None
+
+    @model_validator(mode="after")
+    def at_least_one(self) -> "PrefsIn":
+        if not any(getattr(self, f) is not None for f in type(self).model_fields):
+            raise ValueError("at least one preference is required")
+        return self
+
+
+DISPLAY_PREFS = ("text_scale", "motion", "detail", "tone")
 
 
 @app.put("/api/me/preferences")
 def my_preferences(body: PrefsIn, user: User = Depends(role("customer"))):
     rate("write", user.username)
-    state.db.execute("UPDATE customers SET language = $l WHERE customer_id = $cid",
-                     {"l": body.language, "cid": user.customer_id})
-    return _twin_payload(user.customer_id)
+    cid = user.customer_id
+    with state.db.lock:
+        if body.language is not None:
+            state.db.execute("UPDATE customers SET language = $l WHERE customer_id = $cid",
+                             {"l": body.language, "cid": cid})
+        changes = {k: getattr(body, k) for k in DISPLAY_PREFS if getattr(body, k) is not None}
+        if changes:
+            merged = {**_overrides(cid), **{k: (None if v == "auto" else v) for k, v in changes.items()}}
+            state.db.execute(
+                "INSERT OR REPLACE INTO customer_prefs (customer_id, text_scale, motion, detail, tone, updated_at) "
+                "VALUES ($cid, $ts, $mo, $de, $to, current_timestamp)",
+                {"cid": cid, "ts": merged.get("text_scale"), "mo": merged.get("motion"),
+                 "de": merged.get("detail"), "to": merged.get("tone")},
+            )
+    return _twin_payload(cid)
 
 
 def _guidance_items(cid: int) -> list[dict]:
     c = _customer(cid)
     lang = c["language"]
+    tone = _ui(cid)["tone"]
     moments = state.engine.moments()
     items = []
     for b in state.engine.beliefs(cid, lang):
         if b["state"] not in ("act", "ask", "advisor") or b["moment_id"] not in moments:
             continue
         m = moments[b["moment_id"]]
-        labels = [e["label"] for e in b["evidence"] if e["source"] != "profile"]
-        intro = state.channels.intro(c, m, b["state"], lang, labels)
+        shown = [e for e in b["evidence"] if e["source"] != "profile"]
+        labels = [e["label"] for e in shown]
+        intro = state.channels.intro(c, m, b["state"], lang, labels, tone=tone,
+                                     signal_ids=[e["signal_id"] for e in shown], confidence=b["confidence"])
         items.append({
             "moment_id": m.id,
             "type": b["state"],
@@ -284,6 +351,10 @@ def _guidance_items(cid: int) -> list[dict]:
             "category": m.category,
             "intro": intro["text"],
             "written_by": intro["source"],
+            "tone": intro["tone"],
+            "parts": intro["parts"],
+            "confidence": b["confidence"],
+            "voice_script": state.channels.voice_script(intro["text"], m, b["state"], lang, intro["parts"]),
             "question": m.question.get(lang) if b["state"] == "ask" else None,
             "steps": [{"product": s.product, "title": s.title.get(lang), "body": s.body.get(lang)}
                       for s in m.journey] if b["state"] == "act" else [],
@@ -296,7 +367,8 @@ def _guidance_items(cid: int) -> list[dict]:
 @app.get("/api/me/guidance")
 def my_guidance(user: User = Depends(role("customer"))):
     rate("ai", user.username)
-    return {"items": _guidance_items(user.customer_id)}
+    return {"items": _guidance_items(user.customer_id),
+            "voice": {"provider": "elevenlabs" if config.ELEVENLABS_API_KEY else "browser"}}
 
 
 @app.post("/api/me/guidance/{moment_id}/voice")
@@ -306,15 +378,13 @@ def my_voice(moment_id: str = MomentId, user: User = Depends(role("customer"))):
     item = next((i for i in _guidance_items(user.customer_id) if i["moment_id"] == moment_id), None)
     if not item:
         raise HTTPException(404, "No active guidance for this moment")
-    m = state.engine.moments()[moment_id]
-    lang = _customer(user.customer_id)["language"]
     try:
-        audio = tts(state.channels.voice_script(item["intro"], m, item["type"], lang))
+        audio = tts(item["voice_script"])
     except Exception as exc:
         log.warning("TTS failed: %s", type(exc).__name__)
         raise HTTPException(502, "Voice service unavailable")
     if audio is None:
-        raise HTTPException(503, "Voice channel not configured (set ELEVENLABS_API_KEY)")
+        raise HTTPException(503, "voice_unconfigured")
     return Response(content=audio, media_type="audio/mpeg")
 
 

@@ -70,6 +70,10 @@ def decode_token(token: str) -> dict:
 # ---------------------------------------------------------------- rate limiting (in-memory sliding window)
 
 
+_MAX_KEYS = 5000
+_MAX_WINDOW_S = 60.0
+
+
 class RateLimiter:
     def __init__(self) -> None:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
@@ -78,6 +82,8 @@ class RateLimiter:
     def allow(self, key: str, limit: int, window_s: float) -> bool:
         now = time.monotonic()
         with self._lock:
+            if len(self._hits) > _MAX_KEYS:
+                self._prune(now)
             q = self._hits[key]
             while q and now - q[0] > window_s:
                 q.popleft()
@@ -85,6 +91,27 @@ class RateLimiter:
                 return False
             q.append(now)
             return True
+
+    def blocked(self, key: str, limit: int, window_s: float) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            q = self._hits.get(key)
+            if q is None:
+                return False
+            while q and now - q[0] > window_s:
+                q.popleft()
+            return len(q) >= limit
+
+    def record(self, key: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._hits) > _MAX_KEYS:
+                self._prune(now)
+            self._hits[key].append(now)
+
+    def _prune(self, now: float) -> None:
+        for k in [k for k, q in self._hits.items() if not q or now - q[-1] > _MAX_WINDOW_S]:
+            del self._hits[k]
 
     def reset(self) -> None:
         with self._lock:
@@ -95,15 +122,28 @@ limiter = RateLimiter()
 
 # bucket name -> (limit, window seconds)
 LIMITS = {
-    "login_user": (10, 60),   # per IP + username
-    "login_ip": (30, 60),     # per IP
+    "login_user": (10, 60),   # failed attempts per username, whatever the address
+    "login_ip": (120, 60),    # attempts per client address (generous: many users can share one address)
     "ai": (30, 60),           # AI-written messages per user
     "voice": (6, 60),         # text-to-speech per user (costly)
     "run": (6, 60),           # full population runs per product owner
     "write": (60, 60),        # feedback / consent changes per user
+    "sim": (120, 60),         # what-if simulations per user (read-only, debounced sliders)
+    "theater": (20, 60),      # reasoning-theater replays per user
+    "whynot": (60, 60),       # why-not explanations per user
+    "galaxy": (30, 60),       # population galaxy reads per product owner
 }
 
 
 def check_rate(bucket: str, key: str) -> bool:
     limit, window = LIMITS[bucket]
     return limiter.allow(f"{bucket}:{key}", limit, window)
+
+
+def login_blocked(username: str) -> bool:
+    limit, window = LIMITS["login_user"]
+    return limiter.blocked(f"login_user:{username}", limit, window)
+
+
+def login_failed(username: str) -> None:
+    limiter.record(f"login_user:{username}")
