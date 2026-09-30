@@ -444,6 +444,15 @@ def po_signal_kinds(user: User = Depends(role("product_owner"))):
     return {"kinds": [r for r in rows if r["events"] >= config.K_ANON]}
 
 
+# ------------------------------------------------------------------ feature routers (must be included before the static mount)
+
+from .routes_explain import router as explain_router  # noqa: E402
+from .routes_po import router as po_router  # noqa: E402
+
+app.include_router(explain_router)
+app.include_router(po_router)
+
+
 # ------------------------------------------------------------------ static frontend (production build)
 
 if config.WEB_DIST.is_dir():
