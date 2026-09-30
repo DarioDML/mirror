@@ -83,6 +83,29 @@ gcloud run deploy mirror --source . --region europe-west1 --memory 2Gi --allow-u
 The container generates the synthetic population on start, runs as a non-root user and hides `/api/docs` (`MIRROR_ENV=prod`).
 For anything beyond a demo, put the secrets in Secret Manager instead of env vars.
 
+### Reset the demo to a clean state
+
+Stop the API first (the database file is locked while it runs), then:
+
+```bash
+cd backend
+python reset_demo.py --verify     # regenerates the 100k population (~20 s) and checks the demo numbers
+cd ../web && npm run build        # production build, served by the API on :8000 (real CSP)
+cd ../backend && uvicorn mirror.api:app --port 8000
+```
+
+`--verify` asserts Sofie 0.82 / 0.545 (ask), Lucas 0.839 (act), Marc 0.874 (advisor, even after confirming) and that `jan` cannot open Sofie.
+
+## Making the algorithm visible
+
+- **Watch Mirror think** (customer view): a replay of how evidence arrived, computed by the real engine SQL. Signals light up, the doubt bar shrinks by `(1 - weight)` per signal, the ask/act thresholds and the guardrail/fatigue gates are shown, and a plain-language sentence explains the decision in EN/NL/FR.
+- **What-if**: switch a data source off, remove a signal, change the cap. Read-only and reduce-only (it can never read data the customer switched off); the screen shows "engine-verified" when the server agrees.
+- **Why not?**: for a moment that did not fire, the smallest verified evidence that would change the answer.
+- **Belief web**: signals -> belief -> decision -> app / voice / advisor. "Not true" severs the belief across all channels.
+- **Population galaxy** (product owner): 100,000 pixels, one per customer, grouped by moment, with precision/recall against synthetic ground truth and a threshold slider. Built from aggregate counts only; small cells are hidden or rounded.
+- **Adapts to who you are**: the server derives a display persona from the customer's age, household, language and situation (calm, large type and no percentages for Marc; dense studio view for Lucas). Advisors and product owners get their own visual language. The care flag is never shown to the customer. Offline per-persona copy in EN/NL/FR works without any API key, and Listen falls back to browser speech.
+- **Demo Deck**: on the login screen type the password once and press *Start demo deck*. Six sessions are kept in memory (nothing is stored), switch user with one click or keys 1-6. Press 1-6 once before presenting to warm every view.
+
 ## Demo users
 
 All use `DEMO_PASSWORD`.
@@ -99,7 +122,7 @@ All use `DEMO_PASSWORD`.
 ## 3-minute demo script
 
 1. **0:00 Problem.** 140 hand-built situations vs 2.3M lives, each product guessing on its own.
-2. **0:20 `po`: Run on all customers.** 100k customers, 6.1M events, under a second. AI is only needed for ~3%.
+2. **0:20 `po`: Run on all customers.** 100k customers, 6.1M events, a few seconds (the screen shows the measured time). The population galaxy shows every customer as a pixel. AI is only needed for ~3%.
 3. **0:50 `sofie`.** Mirror shows what KBC believes and why. It is 82% sure she is buying a home, so it **asks**. She says yes, and one plan appears (mortgage, insurance from key handover, EPC check) instead of three ads.
    She sees "growing family, 55%, from toy shop purchases", clicks **Not true**, and it disappears everywhere. Switch to **NL**, press **Listen**.
 4. **1:50 `an`.** Same decisions on the advisor desk: "confirmed", "the customer said this is not true, don't bring it up". Marc is routed to her because of the care flag.
@@ -116,7 +139,7 @@ All use `DEMO_PASSWORD`.
 | Moving in together | 83% | 100% | 15% |
 | A new electric car (added live) | 100% | 100% | 27% |
 
-A full run takes 0.6 to 1 s in our test environment. 2.5% of customers get a message (2.9% after adding the electric-car moment); the rest need no AI call.
+A full run takes roughly 2 to 4 s in our test environment (the product owner screen shows the measured time, so don't promise "under a second"). 2.5% of customers get a message (2.9% after adding the electric-car moment); the rest need no AI call.
 
 **Read these honestly.** The data is synthetic, and we planted the life events ourselves. These numbers show that the pipeline works
 and measures itself, *not* how accurate it would be on real KBC data. They do show the design choice: ambiguous moments
