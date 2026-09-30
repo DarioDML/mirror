@@ -1,0 +1,2 @@
+# Only needed if you use Gemini through Vertex AI (GOOGLE_CLOUD_PROJECT) instead of GEMINI_API_KEY
+google-auth[requests]>=2.35

@@ -1,0 +1,50 @@
+id: moving_in_together
+title: {en: Moving in together, nl: Samenwonen, fr: Emménager ensemble}
+category: household
+priority: 60
+thresholds: {ask: 0.6, act: 0.8}
+question:
+  en: Are you moving in with someone? We can help you set up money matters for two.
+  nl: Ga je samenwonen? We helpen je om je financiën voor twee te regelen.
+  fr: Vous emménagez avec quelqu'un ? Nous pouvons vous aider à organiser vos finances à deux.
+signals:
+  - id: furniture
+    label: {en: several furniture purchases, nl: meerdere aankopen van meubels, fr: plusieurs achats de meubles}
+    source: transactions
+    kind: furniture
+    min_count: 2
+    min_amount: 150
+    within_days: 60
+    weight: 0.35
+  - id: moving_company
+    label: {en: a payment to a moving company, nl: een betaling aan een verhuisfirma, fr: un paiement à une entreprise de déménagement}
+    source: transactions
+    kind: moving_company
+    within_days: 60
+    weight: 0.55
+  - id: joint_account_interest
+    label: {en: a look at joint accounts in the app, nl: interesse in een gezamenlijke rekening in de app, fr: un intérêt pour un compte joint dans l'app}
+    source: app
+    kind: view_joint_account
+    within_days: 60
+    weight: 0.5
+journey:
+  - product: joint_account
+    title: {en: Open a shared account, nl: Open een gezamenlijke rekening, fr: Ouvrez un compte commun}
+    body:
+      en: One account for rent and groceries, while your own accounts stay your own.
+      nl: Eén rekening voor huur en boodschappen, terwijl je eigen rekeningen van jou blijven.
+      fr: Un compte pour le loyer et les courses, vos comptes personnels restent les vôtres.
+  - product: home_insurance
+    title: {en: Update your home insurance, nl: Pas je woningverzekering aan, fr: Adaptez votre assurance habitation}
+    body:
+      en: Make sure your contents and liability cover now includes both of you.
+      nl: Zorg dat je inboedel- en familiale verzekering nu jullie allebei dekt.
+      fr: Vérifiez que votre assurance contenu et RC familiale couvre désormais vous deux.
+  - product: savings
+    title: {en: Start a shared savings goal, nl: Start een gezamenlijk spaardoel, fr: Lancez un objectif d'épargne commun}
+    body:
+      en: A holiday, a sofa, a safety buffer - save for it together and see progress in one place.
+      nl: Een reis, een zetel, een buffer - spaar er samen voor en volg het op één plek.
+      fr: Un voyage, un canapé, une réserve - épargnez ensemble et suivez tout au même endroit.
+guardrails: {min_age: 18, vulnerable: advisor}

@@ -1,0 +1,56 @@
+id: buying_home
+title: {en: Buying a home, nl: Een woning kopen, fr: Achat d'un logement}
+category: housing
+priority: 90
+thresholds: {ask: 0.6, act: 0.85}
+question:
+  en: Are you buying a home? If so, we'll put everything you need into one plan.
+  nl: Ben je een woning aan het kopen? Dan zetten we alles wat je nodig hebt in één plan.
+  fr: Achetez-vous un logement ? Si oui, nous rassemblons tout ce dont vous avez besoin dans un seul plan.
+signals:
+  - id: notary_deposit
+    label: {en: a transfer to a notary, nl: een overschrijving naar een notaris, fr: un virement à un notaire}
+    source: transactions
+    kind: notary
+    min_amount: 1000
+    within_days: 120
+    weight: 0.6
+  - id: mortgage_simulation
+    label: {en: a mortgage simulation in the app, nl: een woonkredietsimulatie in de app, fr: une simulation de crédit hypothécaire dans l'app}
+    source: app
+    kind: mortgage_simulation
+    within_days: 90
+    weight: 0.5
+  - id: home_insurance_interest
+    label: {en: a look at home insurance, nl: interesse in een woningverzekering, fr: un intérêt pour une assurance habitation}
+    source: app
+    kind: view_home_insurance
+    within_days: 90
+    weight: 0.3
+  - id: life_stage
+    label: {en: your life stage, nl: je levensfase, fr: votre étape de vie}
+    source: profile
+    field: age
+    op: between
+    value: [25, 55]
+    weight: 0.1
+journey:
+  - product: mortgage
+    title: {en: Compare your mortgage options, nl: Vergelijk je woonkredietopties, fr: Comparez vos options de crédit hypothécaire}
+    body:
+      en: See what you can borrow and what it costs per month, before you sign anything.
+      nl: Bekijk wat je kunt lenen en wat het per maand kost, nog voor je iets tekent.
+      fr: Découvrez combien vous pouvez emprunter et ce que cela coûte par mois, avant de signer quoi que ce soit.
+  - product: home_insurance
+    title: {en: Insured from the day you get the keys, nl: Verzekerd vanaf de sleuteloverdracht, fr: Assuré dès la remise des clés}
+    body:
+      en: Fire and home insurance that starts on the day of the handover, not a day later.
+      nl: Een brand- en woningverzekering die start op de dag van de overdracht, niet een dag later.
+      fr: Une assurance incendie et habitation qui démarre le jour de la remise des clés, pas un jour plus tard.
+  - product: energy_renovation
+    title: {en: Check the energy label, nl: Check het energielabel (EPC), fr: Vérifiez le certificat PEB}
+    body:
+      en: A poor EPC label can come with renovation obligations. See renovation loans and energy advice.
+      nl: Een slecht EPC-label kan renovatieverplichtingen meebrengen. Bekijk renovatieleningen en energieadvies.
+      fr: Un mauvais certificat PEB peut entraîner des obligations de rénovation. Découvrez les prêts rénovation et les conseils énergie.
+guardrails: {min_age: 18, vulnerable: advisor}

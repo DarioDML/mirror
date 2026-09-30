@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+backend/data/
+*.duckdb
+*.duckdb.wal
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+web/dist/
+.DS_Store
+*.tsbuildinfo

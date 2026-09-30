@@ -1,0 +1,56 @@
+id: growing_family
+title: {en: A growing family, nl: Een groeiend gezin, fr: Une famille qui s'agrandit}
+category: family
+priority: 70
+thresholds: {ask: 0.5, act: 0.8}
+question:
+  en: Has your family grown, or is it about to? Only if you want to, we can help you prepare.
+  nl: Is je gezin gegroeid, of staat dat te gebeuren? Alleen als je dat wilt, helpen we je voorbereiden.
+  fr: Votre famille s'est-elle agrandie, ou est-ce pour bientôt ? Seulement si vous le souhaitez, nous vous aidons à vous préparer.
+signals:
+  - id: toy_purchases
+    label: {en: several toy shop purchases, nl: meerdere aankopen in een speelgoedwinkel, fr: plusieurs achats dans un magasin de jouets}
+    source: transactions
+    kind: toy_store
+    min_count: 2
+    within_days: 90
+    weight: 0.3
+  - id: baby_store
+    label: {en: a purchase in a baby shop, nl: een aankoop in een babywinkel, fr: un achat dans un magasin pour bébés}
+    source: transactions
+    kind: baby_store
+    within_days: 120
+    weight: 0.35
+  - id: baby_store_repeat
+    label: {en: repeated baby shop purchases, nl: herhaalde aankopen in een babywinkel, fr: des achats répétés dans un magasin pour bébés}
+    source: transactions
+    kind: baby_store
+    min_count: 3
+    within_days: 120
+    weight: 0.4
+  - id: child_savings_interest
+    label: {en: a look at savings for children, nl: interesse in sparen voor kinderen, fr: un intérêt pour l'épargne pour enfants}
+    source: app
+    kind: view_child_savings
+    within_days: 120
+    weight: 0.45
+journey:
+  - product: child_savings
+    title: {en: A savings account for your child, nl: Een spaarrekening voor je kind, fr: Un compte d'épargne pour votre enfant}
+    body:
+      en: Small monthly amounts add up. Grandparents can contribute too.
+      nl: Kleine maandelijkse bedragen tellen op. Ook grootouders kunnen bijdragen.
+      fr: De petits montants mensuels s'additionnent. Les grands-parents peuvent aussi contribuer.
+  - product: family_insurance
+    title: {en: Check your family liability cover, nl: Check je familiale verzekering, fr: Vérifiez votre RC familiale}
+    body:
+      en: Make sure everyone in the household is covered.
+      nl: Zorg dat iedereen in het gezin gedekt is.
+      fr: Assurez-vous que tout le ménage est couvert.
+  - product: budget
+    title: {en: Rebalance your monthly budget, nl: Herbekijk je maandbudget, fr: Revoyez votre budget mensuel}
+    body:
+      en: See how childcare and new costs change your month, with the child benefit included.
+      nl: Bekijk hoe opvang en nieuwe kosten je maand veranderen, met het groeipakket erbij.
+      fr: Voyez comment la garde et les nouveaux frais modifient votre mois, allocations familiales comprises.
+guardrails: {min_age: 18, vulnerable: advisor}

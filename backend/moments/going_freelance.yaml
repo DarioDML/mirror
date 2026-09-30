@@ -1,0 +1,48 @@
+id: going_freelance
+title: {en: Starting as a freelancer, nl: Starten als zelfstandige, fr: Se lancer comme indépendant}
+category: work
+priority: 80
+thresholds: {ask: 0.6, act: 0.8}
+question:
+  en: Are you starting your own business? We can set up the essentials with you.
+  nl: Start je als zelfstandige? We regelen de basis graag samen met jou.
+  fr: Vous lancez votre activité d'indépendant ? Nous pouvons mettre en place l'essentiel avec vous.
+signals:
+  - id: business_registration
+    label: {en: a business registration fee, nl: een inschrijving bij een ondernemingsloket, fr: une inscription auprès d'un guichet d'entreprises}
+    source: transactions
+    kind: business_registration
+    within_days: 180
+    weight: 0.55
+  - id: business_account_interest
+    label: {en: a look at business accounts, nl: interesse in een zakelijke rekening, fr: un intérêt pour un compte professionnel}
+    source: app
+    kind: view_business_account
+    within_days: 90
+    weight: 0.45
+  - id: accounting_software
+    label: {en: an accounting software subscription, nl: een abonnement op boekhoudsoftware, fr: un abonnement à un logiciel comptable}
+    source: transactions
+    kind: accounting_software
+    within_days: 180
+    weight: 0.35
+journey:
+  - product: business_account
+    title: {en: Separate business and private money, nl: Scheid zakelijk en privé, fr: Séparez le professionnel et le privé}
+    body:
+      en: A business account keeps your bookkeeping and VAT simple from day one.
+      nl: Een zakelijke rekening houdt je boekhouding en btw eenvoudig vanaf dag één.
+      fr: Un compte professionnel simplifie votre comptabilité et votre TVA dès le premier jour.
+  - product: income_protection
+    title: {en: Protect your income, nl: Bescherm je inkomen, fr: Protégez vos revenus}
+    body:
+      en: As a freelancer, illness means no income. Guaranteed income insurance covers that gap.
+      nl: Als zelfstandige betekent ziekte geen inkomen. Een verzekering gewaarborgd inkomen dekt dat gat.
+      fr: En tant qu'indépendant, une maladie signifie aucun revenu. Une assurance revenu garanti couvre ce manque.
+  - product: pension
+    title: {en: Build your own pension, nl: Bouw je eigen pensioen op (VAPZ), fr: Constituez votre pension (PLCI)}
+    body:
+      en: A supplementary pension for the self-employed is tax-deductible.
+      nl: Een vrij aanvullend pensioen voor zelfstandigen is fiscaal aftrekbaar.
+      fr: La pension libre complémentaire pour indépendants est fiscalement déductible.
+guardrails: {min_age: 18, vulnerable: advisor}

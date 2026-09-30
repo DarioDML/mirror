@@ -1,0 +1,27 @@
+{
+  "id": "ev_purchase",
+  "title": {"en": "A new electric car", "nl": "Een nieuwe elektrische wagen", "fr": "Une nouvelle voiture électrique"},
+  "category": "mobility",
+  "priority": 50,
+  "thresholds": {"ask": 0.6, "act": 0.8},
+  "question": {
+    "en": "Did you just switch to an electric car? We can make sure insurance and charging are sorted.",
+    "nl": "Ben je net overgestapt op een elektrische wagen? We zorgen dat verzekering en laden in orde zijn.",
+    "fr": "Vous venez de passer à une voiture électrique ? Nous veillons à ce que l'assurance et la recharge soient en ordre."
+  },
+  "signals": [
+    {"id": "car_dealer", "label": {"en": "a large payment to a car dealer", "nl": "een grote betaling aan een autodealer", "fr": "un paiement important à un concessionnaire"},
+     "source": "transactions", "kind": "car_dealer", "min_amount": 15000, "within_days": 120, "weight": 0.55},
+    {"id": "ev_charging", "label": {"en": "regular charging sessions", "nl": "regelmatige laadsessies", "fr": "des sessions de recharge régulières"},
+     "source": "transactions", "kind": "ev_charging", "min_count": 3, "within_days": 60, "weight": 0.4},
+    {"id": "car_insurance_interest", "label": {"en": "a look at car insurance", "nl": "interesse in een autoverzekering", "fr": "un intérêt pour une assurance auto"},
+     "source": "app", "kind": "view_car_insurance", "within_days": 60, "weight": 0.3}
+  ],
+  "journey": [
+    {"product": "car_insurance", "title": {"en": "Insurance that fits an EV", "nl": "Een verzekering op maat van een EV", "fr": "Une assurance adaptée à une VE"},
+     "body": {"en": "Battery and charging cable cover included.", "nl": "Inclusief dekking voor batterij en laadkabel.", "fr": "Couverture batterie et câble de recharge incluse."}},
+    {"product": "charging_point", "title": {"en": "A charging point at home", "nl": "Een laadpaal thuis", "fr": "Une borne de recharge à domicile"},
+     "body": {"en": "Finance a home charger and see what you save versus public charging.", "nl": "Financier een laadpaal en zie wat je bespaart tegenover publiek laden.", "fr": "Financez une borne et voyez ce que vous économisez par rapport à la recharge publique."}}
+  ],
+  "guardrails": {"min_age": 18, "vulnerable": "advisor"}
+}
